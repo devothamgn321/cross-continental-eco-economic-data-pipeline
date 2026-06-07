@@ -1,4 +1,4 @@
-# Team 9 Data Engineering Pipeline
+# Cross-Continental Eco-Economic Data Pipeline
 
 ## Overview
 This project implements an end-to-end ETL pipeline that integrates multiple heterogeneous data sources into a centralized PostgreSQL warehouse. The pipeline combines World Bank economic indicators, EIA energy data, World Food Programme food prices, and weather data into a unified analytical dataset keyed by `country_code` and `year_month`.
