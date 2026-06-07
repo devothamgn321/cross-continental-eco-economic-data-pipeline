@@ -97,8 +97,8 @@ graph TD
 
 ### 1. Clone the Repository
 ```bash
-git clone <repository-url>
-cd T9_final_project
+git clone https://github.com/devothamgn321/global-food-security-data-platform.git
+cd global-food-security-data-platform
 ```
 
 ### 2. Create the Environment File
