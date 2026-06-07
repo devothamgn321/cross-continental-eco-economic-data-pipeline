@@ -1,8 +1,6 @@
-# Global Food Security Data Platform
+# Team 9 Data Engineering Pipeline
 
 ## Overview
-Dockerized data platform integrating World Bank, EIA, WFP, and weather data into PostgreSQL with automated ETL, scheduled updates, and a Flask API.
-
 This project implements an end-to-end ETL pipeline that integrates multiple heterogeneous data sources into a centralized PostgreSQL warehouse. The pipeline combines World Bank economic indicators, EIA energy data, World Food Programme food prices, and weather data into a unified analytical dataset keyed by `country_code` and `year_month`.
 
 The project includes:
@@ -32,22 +30,27 @@ These sources are standardized and loaded into PostgreSQL tables, then merged in
 - Environment-based configuration through `.env`
 
 ## Project Structure
-- `master.py` — main orchestration script for full backfill
-- `world_bank.py` — World Bank ingestion and transformation
-- `food_download.py` — downloads the latest WFP food prices file
-- `food_prices.py` — merges historical and latest WFP food data
-- `eia_energy.py` — EIA energy ingestion
-- `weather_backfill.py` — weather ingestion
-- `weather_update.py` — optional weather incremental updater
-- `config.py` — shared configuration
-- `app.py` — Flask API
-- `start.sh` — Docker startup script for backfill and API launch
-- `run_incremental.sh` — incremental refresh runner
-- `Dockerfile` — app container definition
-- `docker-compose.yml` — multi-container setup
-- `requirements.txt` — Python dependencies
-- `.env.example` — environment template
-- `wfp_food_prices_master_2023_2025.csv` — included base food dataset
+* `config.py` — shared configuration
+* `.env.example` — environment template
+* `requirements.txt` — Python dependencies
+* `Dockerfile` — app container definition
+* `docker-compose.yml` — multi-container setup
+* `start.sh` — Docker startup script for backfill and API launch
+* `start_with_cron.sh` — Docker startup script for backfill, cron, and API launch
+* `run_incremental.sh` — incremental refresh runner
+* `master.py` — main orchestration script for full backfill
+* `world_bank.py` — World Bank ingestion and transformation
+* `eia_energy.py` — EIA energy ingestion
+* `weather.py` — weather ingestion
+* `food_download.py` — downloads the latest WFP food prices file
+* `food_backfill.py` — builds the historical food prices backfill file
+* `food_prices.py` — merges historical and latest WFP food data
+* `app.py` — Flask API
+* `api_smoke_test.py` — simple API smoke test script
+* `api_check.ipynb` — notebook for API checks and validation
+* `data/raw/` — raw source extracts
+* `data/processed/` — processed source outputs
+
 
 ## Data Sources
 1. World Bank API — macroeconomic indicators  
@@ -81,8 +84,41 @@ Install:
 
 ## Environment Configuration
 
-Create a `.env` file in the project root.
+This project requires an API key for the U.S. Energy Information Administration API.
+
+### EIA API key setup
+
+Register for a free API key at:
+[https://www.eia.gov/opendata/](https://www.eia.gov/opendata/)
+
+After you receive the key, create a `.env` file in the project root.
 
 ### Option 1: copy from template
-```bash
+
 cp .env.example .env
+
+Then open the `.env` file and replace the placeholder value with your EIA API key.
+
+Example:
+
+EIA_API_KEY=your_actual_api_key_here
+
+## Setup and Run
+
+From the project root, build and start the containers with:
+
+docker compose up --build
+
+
+
+ 
+ 
+ 
+
+
+
+
+
+
+
+

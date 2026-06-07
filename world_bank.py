@@ -4,18 +4,32 @@
 from pathlib import Path
 from datetime import datetime, timezone
 import os
+import time
 from typing import Dict, List, Optional, Tuple
 
 import pandas as pd
 import requests
+from requests.exceptions import ReadTimeout, RequestException
 from sqlalchemy import create_engine, text
 
 from config import DB_CONFIG
 
 
+# Base project directory
 BASE_DIR = Path(__file__).resolve().parent
-OUTPUT_FILE = BASE_DIR / "world_bank_monthly.csv"
-SAMPLE_FILE = BASE_DIR / "world_bank_sample10.csv"
+
+# Data folder structure
+DATA_DIR = BASE_DIR / "data"
+RAW_DIR = DATA_DIR / "raw" / "world_bank"
+PROCESSED_DIR = DATA_DIR / "processed" / "world_bank"
+
+# Ensure raw/processed folders exist before writing files
+RAW_DIR.mkdir(parents=True, exist_ok=True)
+PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
+
+# Output file for processed data
+OUTPUT_FILE = PROCESSED_DIR / "world_bank_monthly.csv"
+
 
 COUNTRIES: Dict[str, str] = {
     "USA": "USA",
@@ -32,10 +46,16 @@ INDICATORS: Dict[str, str] = {
 }
 
 WORLD_BANK_API_TEMPLATE = "https://api.worldbank.org/v2/country/{country}/indicator/{indicator}"
-REQUEST_TIMEOUT = int(os.getenv("WORLD_BANK_TIMEOUT", "60"))
+REQUEST_TIMEOUT = int(os.getenv("WORLD_BANK_TIMEOUT", "90"))
+MAX_RETRIES = int(os.getenv("WORLD_BANK_MAX_RETRIES", "4"))
+RETRY_DELAY = int(os.getenv("WORLD_BANK_RETRY_DELAY", "5"))
 
 
 def get_engine():
+    """
+    Create and return a SQLAlchemy engine using the shared DB config.
+    This is only used if the script is allowed to load directly to PostgreSQL.
+    """
     engine_url = (
         f"postgresql://{DB_CONFIG['user']}:{DB_CONFIG['password']}"
         f"@{DB_CONFIG['host']}:{DB_CONFIG['port']}/{DB_CONFIG['database']}"
@@ -44,16 +64,31 @@ def get_engine():
 
 
 def get_pipeline_mode() -> str:
+    """
+    Read pipeline mode from environment.
+    Expected values:
+    - backfill
+    - incremental
+    """
     return os.getenv("PIPELINE_MODE", "backfill").strip().lower()
 
 
 def get_backfill_year_range() -> Tuple[int, int]:
+    """
+    Read configured backfill start/end years from environment variables.
+    Defaults to 2022 through 2024 if not provided.
+    """
     start_year = int(os.getenv("WORLD_BANK_START_YEAR", "2022"))
     end_year = int(os.getenv("WORLD_BANK_END_YEAR", "2024"))
     return start_year, end_year
 
 
 def world_bank_request(country: str, indicator: str, page: int = 1, per_page: int = 20000) -> List[dict]:
+    """
+    Make a single request to the World Bank API for one country + indicator.
+    Returns the list of data records from the payload.
+    Retries automatically on timeouts and temporary request failures.
+    """
     url = WORLD_BANK_API_TEMPLATE.format(country=country, indicator=indicator)
     params = {
         "format": "json",
@@ -61,17 +96,47 @@ def world_bank_request(country: str, indicator: str, page: int = 1, per_page: in
         "page": page,
     }
 
-    response = requests.get(url, params=params, timeout=REQUEST_TIMEOUT)
-    response.raise_for_status()
-    payload = response.json()
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            response = requests.get(url, params=params, timeout=REQUEST_TIMEOUT)
+            response.raise_for_status()
+            payload = response.json()
 
-    if not isinstance(payload, list) or len(payload) < 2 or payload[1] is None:
-        return []
+            if not isinstance(payload, list) or len(payload) < 2 or payload[1] is None:
+                return []
 
-    return payload[1]
+            return payload[1]
+
+        except ReadTimeout:
+            print(
+                f"Timeout on World Bank request: country={country}, "
+                f"indicator={indicator}, page={page}, "
+                f"attempt={attempt}/{MAX_RETRIES}"
+            )
+            if attempt == MAX_RETRIES:
+                raise
+            time.sleep(RETRY_DELAY)
+
+        except RequestException as e:
+            print(
+                f"World Bank API request failed: country={country}, "
+                f"indicator={indicator}, page={page}, "
+                f"attempt={attempt}/{MAX_RETRIES}, error={e}"
+            )
+            if attempt == MAX_RETRIES:
+                raise
+            time.sleep(RETRY_DELAY)
+
+    return []
 
 
 def fetch_indicator_series(country: str, indicator: str, start_year: int, end_year: int) -> pd.DataFrame:
+    """
+    Fetch annual data for a single country + indicator over the requested year range.
+
+    This function also saves the extracted annual data into the raw folder
+    before any monthly expansion happens.
+    """
     rows: List[dict] = []
     page = 1
 
@@ -106,10 +171,21 @@ def fetch_indicator_series(country: str, indicator: str, start_year: int, end_ye
 
         page += 1
 
-    return pd.DataFrame(rows)
+    raw_df = pd.DataFrame(rows)
+
+    # Save raw annual extract for auditing/debugging
+    raw_file = RAW_DIR / f"{country}_{indicator}_raw.csv"
+    raw_df.to_csv(raw_file, index=False)
+    print(f"Saved raw file: {raw_file}")
+
+    return raw_df
 
 
 def get_latest_available_year_from_api() -> Optional[int]:
+    """
+    Check the World Bank API to estimate the latest available year across
+    the selected countries, using population as the probe indicator.
+    """
     latest_years: List[int] = []
 
     for country in COUNTRIES.values():
@@ -140,6 +216,10 @@ def get_latest_available_year_from_api() -> Optional[int]:
 
 
 def get_max_loaded_year_from_db(table_name: str = "worldbank") -> Optional[int]:
+    """
+    Look at the existing database table and determine the latest loaded year.
+    Used only in incremental mode.
+    """
     try:
         engine = get_engine()
         query = text(
@@ -157,6 +237,16 @@ def get_max_loaded_year_from_db(table_name: str = "worldbank") -> Optional[int]:
 
 
 def resolve_year_range() -> Tuple[Optional[int], Optional[int], str]:
+    """
+    Determine which year range this pipeline should extract.
+
+    Backfill mode:
+    - uses configured start/end years
+
+    Incremental mode:
+    - compares API latest year vs current DB max year
+    - only pulls new years if available
+    """
     mode = get_pipeline_mode()
 
     if mode == "backfill":
@@ -194,6 +284,10 @@ def resolve_year_range() -> Tuple[Optional[int], Optional[int], str]:
 
 
 def expand_annual_to_monthly(df: pd.DataFrame, value_column: str) -> pd.DataFrame:
+    """
+    Expand annual indicator values to monthly rows by repeating the same annual
+    value across all 12 months in that year.
+    """
     if df.empty:
         return pd.DataFrame(columns=["country_code", "year_month", value_column])
 
@@ -213,6 +307,15 @@ def expand_annual_to_monthly(df: pd.DataFrame, value_column: str) -> pd.DataFram
 
 
 def build_world_bank_monthly(start_year: int, end_year: int) -> pd.DataFrame:
+    """
+    Build the final processed monthly World Bank dataset.
+
+    Steps:
+    1. Pull each indicator for each country
+    2. Save the annual extract as raw data
+    3. Expand annual values to monthly rows
+    4. Merge all indicators into one processed monthly table
+    """
     indicator_frames: List[pd.DataFrame] = []
 
     for output_column, indicator_id in INDICATORS.items():
@@ -244,8 +347,7 @@ def build_world_bank_monthly(start_year: int, end_year: int) -> pd.DataFrame:
                 "gdp",
                 "inflation",
                 "population",
-                "source",
-                "load_timestamp",
+               
             ]
         )
 
@@ -254,20 +356,24 @@ def build_world_bank_monthly(start_year: int, end_year: int) -> pd.DataFrame:
         merged = merged.merge(frame, on=["country_code", "year_month"], how="outer")
 
     merged = merged.sort_values(["country_code", "year_month"]).reset_index(drop=True)
-    merged["source"] = "World Bank Open Data API"
-    merged["load_timestamp"] = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+   
     return merged
 
 
 def save_outputs(df: pd.DataFrame) -> None:
+    """
+    Save the full processed monthly dataset to the processed folder.
+    """
     df.to_csv(OUTPUT_FILE, index=False)
-    df.head(10).to_csv(SAMPLE_FILE, index=False)
-
-    print(f"Saved: {OUTPUT_FILE}")
-    print(f"Saved: {SAMPLE_FILE}")
+    print(f"Saved processed file: {OUTPUT_FILE}")
 
 
 def load_to_database(df: pd.DataFrame, table_name: str = "worldbank") -> None:
+    """
+    Optionally load the processed dataframe directly to PostgreSQL.
+    In your master pipeline flow, this can be turned off so master.py
+    controls the final database rebuild.
+    """
     if df.empty:
         print("Skipping database load: DataFrame is empty.")
         return
@@ -278,6 +384,15 @@ def load_to_database(df: pd.DataFrame, table_name: str = "worldbank") -> None:
 
 
 def run() -> pd.DataFrame:
+    """
+    Main entry point for the World Bank pipeline.
+
+    Flow:
+    1. Resolve extraction year range
+    2. Build processed monthly dataset
+    3. Save raw and processed outputs to disk
+    4. Optionally load processed data to PostgreSQL
+    """
     mode = get_pipeline_mode()
     start_year, end_year, reason = resolve_year_range()
 

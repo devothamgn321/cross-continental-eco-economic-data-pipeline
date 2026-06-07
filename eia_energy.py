@@ -12,7 +12,17 @@ import requests
 from config import EIA_API_KEY
 
 
+# Base project directory
 BASE_DIR = Path(__file__).resolve().parent
+
+# Data folder structure
+DATA_DIR = BASE_DIR / "data"
+RAW_DIR = DATA_DIR / "raw" / "energy"
+PROCESSED_DIR = DATA_DIR / "processed" / "energy"
+
+# Ensure raw/processed folders exist before writing files
+RAW_DIR.mkdir(parents=True, exist_ok=True)
+PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
 
 COUNTRIES = ["USA", "BRA", "IND", "PHL", "NGA"]
 
@@ -27,21 +37,32 @@ PRODUCTS = [
 
 
 def get_pipeline_mode() -> str:
+    """
+    Read pipeline mode from environment.
+    Expected values:
+    - backfill
+    - incremental
+    """
     return os.getenv("PIPELINE_MODE", "backfill").strip().lower()
 
 
 def world_safe_latest_year() -> int:
     """
     Conservative latest year for annual EIA international data.
-    Uses prior year to avoid assuming the current year is fully available.
+    Uses the prior year to avoid assuming the current year is fully available.
     """
     return datetime.now().year - 1
 
 
 def get_year_range() -> Tuple[int, int]:
     """
-    backfill    -> 2022 to latest safely available full year
-    incremental -> latest safely available full year only
+    Determine the year range for extraction.
+
+    backfill:
+    - 2022 through the latest safely available full year
+
+    incremental:
+    - latest safely available full year only
     """
     mode = get_pipeline_mode()
     latest_year = world_safe_latest_year()
@@ -53,6 +74,13 @@ def get_year_range() -> Tuple[int, int]:
 
 
 def fetch_eia_annual(country_code: str, product_id: str, activity_id: str) -> pd.DataFrame:
+    """
+    Fetch annual EIA international energy data for one country/product/activity
+    combination over the selected year range.
+
+    This function also saves the raw annual extract to the raw folder so the
+    original API pull is preserved before monthly transformation.
+    """
     url = "https://api.eia.gov/v2/international/data/"
     start_year, end_year = get_year_range()
 
@@ -75,7 +103,14 @@ def fetch_eia_annual(country_code: str, product_id: str, activity_id: str) -> pd
         records = data.get("response", {}).get("data", [])
 
         if records:
-            return pd.DataFrame(records)
+            raw_df = pd.DataFrame(records)
+
+            # Save raw annual API extract for auditing/debugging
+            raw_path = RAW_DIR / f"{country_code}_{product_id}_{activity_id}_raw.csv"
+            raw_df.to_csv(raw_path, index=False)
+            print(f"Saved raw file: {raw_path}")
+
+            return raw_df
 
     except Exception as e:
         print(f"Error fetching {country_code} ({product_id}, {activity_id}): {e}")
@@ -84,6 +119,10 @@ def fetch_eia_annual(country_code: str, product_id: str, activity_id: str) -> pd
 
 
 def interpolate_to_monthly(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Convert annual values to monthly values by dividing each annual total
+    equally across all 12 months of the year.
+    """
     rows = []
 
     for _, row in df.iterrows():
@@ -112,6 +151,17 @@ def interpolate_to_monthly(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def run() -> Optional[pd.DataFrame]:
+    """
+    Main entry point for the EIA energy pipeline.
+
+    Flow:
+    1. Determine year range based on pipeline mode
+    2. Fetch raw annual data for each country/product/activity combination
+    3. Save raw extracts to disk
+    4. Convert annual data to monthly values
+    5. Pivot to the final processed table shape
+    6. Save processed output to the processed folder
+    """
     if not EIA_API_KEY:
         raise ValueError(
             "Missing EIA_API_KEY. Add it to your .env file before running the pipeline."
@@ -162,9 +212,9 @@ def run() -> Optional[pd.DataFrame]:
 
     energy_pivot.columns.name = None
 
-    output_path = BASE_DIR / "energy.csv"
+    output_path = PROCESSED_DIR / "energy.csv"
     energy_pivot.to_csv(output_path, index=False)
-    print(f"Saved: {output_path.name} {energy_pivot.shape}")
+    print(f"Saved processed file: {output_path} {energy_pivot.shape}")
 
     return energy_pivot
 

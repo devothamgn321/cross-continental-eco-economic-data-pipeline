@@ -12,8 +12,20 @@ from sqlalchemy import create_engine
 from config import DB_CONFIG, WEATHER_BASE_URL
 
 
+# Base project directory
 BASE_DIR = Path(__file__).resolve().parent
-OUTPUT_FILE = BASE_DIR / "weather.csv"
+
+# Data folder structure
+DATA_DIR = BASE_DIR / "data"
+RAW_DIR = DATA_DIR / "raw" / "weather"
+PROCESSED_DIR = DATA_DIR / "processed" / "weather"
+
+# Ensure raw/processed folders exist before writing files
+RAW_DIR.mkdir(parents=True, exist_ok=True)
+PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
+
+# Output file for processed monthly weather data
+OUTPUT_FILE = PROCESSED_DIR / "weather.csv"
 
 COUNTRIES = {
     "USA": {"lat": 39.2904, "lon": -76.6122},   # Baltimore
@@ -25,6 +37,10 @@ COUNTRIES = {
 
 
 def get_engine():
+    """
+    Create and return a SQLAlchemy engine using the shared DB config.
+    This is used when loading the processed weather table to PostgreSQL.
+    """
     engine_url = (
         f"postgresql://{DB_CONFIG['user']}:{DB_CONFIG['password']}"
         f"@{DB_CONFIG['host']}:{DB_CONFIG['port']}/{DB_CONFIG['database']}"
@@ -33,13 +49,24 @@ def get_engine():
 
 
 def get_pipeline_mode() -> str:
+    """
+    Read pipeline mode from environment.
+    Expected values:
+    - backfill
+    - incremental
+    """
     return os.getenv("PIPELINE_MODE", "backfill").strip().lower()
 
 
 def get_date_range() -> tuple[str, str]:
     """
-    backfill    -> 2022-01-01 through last completed day
-    incremental -> recent window only, to support scheduled refreshes
+    Determine the date range for extraction.
+
+    backfill:
+    - 2022-01-01 through the last completed day
+
+    incremental:
+    - recent window only, to support scheduled refreshes
     """
     mode = get_pipeline_mode()
     today = datetime.today().date()
@@ -54,6 +81,13 @@ def get_date_range() -> tuple[str, str]:
 
 
 def fetch_weather_data(country_code: str, lat: float, lon: float, start_date: str, end_date: str) -> pd.DataFrame:
+    """
+    Fetch daily weather data for one country coordinate pair over the requested
+    date range.
+
+    This function also saves the raw daily extract into the raw weather folder
+    before monthly aggregation happens.
+    """
     if not WEATHER_BASE_URL:
         raise ValueError("Missing WEATHER_BASE_URL in .env")
 
@@ -86,10 +120,22 @@ def fetch_weather_data(country_code: str, lat: float, lon: float, start_date: st
         return df
 
     df["Country_Code"] = country_code
+
+    # Save raw daily extract for auditing/debugging
+    raw_file = RAW_DIR / f"{country_code}_weather_raw.csv"
+    df.to_csv(raw_file, index=False)
+    print(f"Saved raw file: {raw_file}")
+
     return df
 
 
 def transform_to_monthly(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Aggregate daily weather data into monthly metrics for each country.
+
+    - mean monthly temperature
+    - total monthly precipitation
+    """
     if df.empty:
         return df
 
@@ -119,12 +165,26 @@ def transform_to_monthly(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def load_to_database(df: pd.DataFrame, table_name: str = "weather") -> None:
+    """
+    Load the processed monthly weather dataframe to PostgreSQL.
+    """
     engine = get_engine()
     df.to_sql(table_name, engine, if_exists="replace", index=False)
     print(f"Successfully loaded weather data into '{table_name}'")
 
 
 def run() -> pd.DataFrame:
+    """
+    Main entry point for the weather pipeline.
+
+    Flow:
+    1. Determine extraction date range based on pipeline mode
+    2. Fetch raw daily weather data for each project country
+    3. Save raw daily extracts to disk
+    4. Transform daily data into monthly metrics
+    5. Save the processed monthly weather file
+    6. Load the processed table to PostgreSQL
+    """
     mode = get_pipeline_mode()
     start_date, end_date = get_date_range()
 
@@ -145,8 +205,9 @@ def run() -> pd.DataFrame:
     daily_df = pd.concat(all_data, ignore_index=True)
     monthly_df = transform_to_monthly(daily_df)
 
+    # Save processed monthly output to the processed folder
     monthly_df.to_csv(OUTPUT_FILE, index=False)
-    print(f"Saved: {OUTPUT_FILE.name} {monthly_df.shape}")
+    print(f"Saved processed file: {OUTPUT_FILE} {monthly_df.shape}")
 
     load_to_database(monthly_df, table_name="weather")
 

@@ -51,15 +51,7 @@ def home():
 
     sample_rows = fetch_all("""
         SELECT
-            country_code,
-            year_month,
-            gdp,
-            inflation,
-            population,
-            rice_price_usd_per_kg,
-            wheat_flour_price_usd_per_kg,
-            electricity_consumption,
-            total_precipitation
+        *
         FROM master_data
         ORDER BY country_code, year_month
         LIMIT 12;
@@ -84,7 +76,7 @@ def home():
     <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>Global Food Security Data Platform</title>
+        <title>Cross-Continental Eco-Economic Data Pipeline</title>
         <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
         <style>
             * { box-sizing: border-box; }
@@ -242,7 +234,7 @@ def home():
         <div class="container">
             <div class="hero">
                 <div class="badge">Live Warehouse Dashboard</div>
-                <h1>Global Food Security Data Platform</h1>
+                <h1>Cross-Continental Eco-Economic Data Pipeline</h1>
                 <p>Integrated World Bank, EIA, WFP, and weather data in PostgreSQL with API and automated ETL.</p>
             </div>
 
@@ -388,7 +380,7 @@ def get_countries():
 @app.route("/api/get_world_bank", methods=["GET"])
 def get_world_bank():
     return jsonify(fetch_all("""
-        SELECT country_code, year_month, gdp, inflation, population, source, load_timestamp
+        SELECT country_code, year_month, gdp, inflation, population
         FROM worldbank
         ORDER BY country_code, year_month;
     """))
@@ -401,7 +393,7 @@ def get_food_prices():
             country_code,
             year_month,
             rice_price_usd_per_kg,
-            wheat_flour_price_usd_per_kg
+            wheat_price_usd_per_kg
         FROM food_prices
         ORDER BY country_code, year_month;
     """))
@@ -447,7 +439,7 @@ def get_all():
             md.inflation,
             md.population,
             md.rice_price_usd_per_kg,
-            md.wheat_flour_price_usd_per_kg,
+            md.wheat_price_usd_per_kg,
             md.electricity_consumption,
             md.electricity_production,
             md.natural_gas_consumption,
@@ -462,4 +454,4 @@ def get_all():
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8001, debug=True)
+    app.run(host="0.0.0.0", port=8001, debug=False)

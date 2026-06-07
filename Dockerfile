@@ -13,4 +13,4 @@ RUN chmod +x start.sh run_incremental.sh start_with_cron.sh
 
 EXPOSE 8001
 
-CMD ["./start_with_cron.sh"]
+CMD ["sh", "./start_with_cron.sh"]

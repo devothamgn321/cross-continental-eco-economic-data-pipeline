@@ -6,3 +6,4 @@ python-dotenv
 requests-cache
 flask
 beautifulsoup4
+jupyterlab
