@@ -2,6 +2,17 @@
 
 ## Overview
 
+## Product Motivation
+
+This project was designed as a reusable data platform for cross-country environmental and economic analysis. The goal was not only to build ETL scripts, but to create a system that could help users monitor how climate, food prices, energy usage, and macroeconomic conditions change over time.
+
+From a product perspective, the platform focuses on:
+
+- Turning fragmented datasets into one usable analytical view
+- Reducing manual data collection through automated refreshes
+- Making data accessible through APIs for downstream applications
+- Supporting future AI/ML use cases such as forecasting, anomaly detection, and cross-country risk analysis
+
 This project is an end-to-end automated data engineering platform that integrates environmental and economic datasets from multiple global sources into a centralized PostgreSQL data warehouse.
 
 The platform collects, transforms, standardizes, and serves data through a REST API, enabling cross-country analysis of weather, food prices, energy production/consumption, and macroeconomic indicators.
@@ -21,6 +32,31 @@ The system is fully containerized using Docker and supports automated refreshes 
 
 This platform was designed and built with a product-first methodology to bridge the gap between complex climate and economic data engineering and downstream analytical consumers.
 
+## AI / ML Readiness
+
+The pipeline creates a clean, standardized monthly dataset that can be used as input for future AI and machine learning workflows.
+
+Potential use cases include:
+
+- Forecasting food price changes
+- Detecting climate or economic anomalies
+- Modeling relationships between weather, energy usage, and food prices
+- Building dashboards or decision-support tools for policy and operations teams
+
+The current project focuses on the data infrastructure layer required before reliable AI models can be built.
+
+
+## Product & Engineering Decisions
+
+Key decisions made during the project included:
+
+- Using `country_code` and `year_month` as common join keys to make multiple datasets interoperable
+- Preserving missing source coverage as nulls instead of dropping records, so users can see real data gaps
+- Separating historical backfill from incremental updates to make the system more scalable
+- Using Docker Compose to make the system reproducible across environments
+- Exposing the final dataset through REST APIs so downstream tools can consume the data without direct database access
+
+- 
 ### 🎯 Target User Personas
 | Persona | Core Needs | Pain Points | Platform Use Case |
 | :--- | :--- | :--- | :--- |
