@@ -17,9 +17,11 @@ The system is fully containerized using Docker and supports automated refreshes 
 
 ---
 
-## Project Documentation
+## Product Strategy & Documentation
 
-Detailed project architecture, data models, system components design, ingestion pipeline details, and experimental results can be found in the official **[Project Documentation PDF](./Project%20Documentation.pdf)**.
+This project contains a comprehensive product strategy roadmap and deep technical documentation:
+* 🎯 **[Product Specification Document (AI PM Spec)](./PRODUCT_SPEC.md)**: Product vision, target user personas, KPIs/metrics, development roadmap, and feature design for a Natural Language SQL conversational AI chatbot.
+* 📄 **[Project Documentation PDF](./Project%20Documentation.pdf)**: Comprehensive report detailing the ETL data modeling, entity-relationship diagrams (ERD), pipeline orchestration, validation rules, and schema design.
 
 ---
 
@@ -94,6 +96,7 @@ graph TD
 ├── start_with_cron.sh
 ├── run_incremental.sh
 ├── cronjob
+├── PRODUCT_SPEC.md
 ├── Project Documentation.pdf
 └── README.md
 ```
