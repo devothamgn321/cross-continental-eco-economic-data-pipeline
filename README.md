@@ -17,11 +17,54 @@ The system is fully containerized using Docker and supports automated refreshes 
 
 ---
 
-## Product Strategy & Documentation
+## Product Strategy & Vision
 
-This project contains a comprehensive product strategy roadmap and deep technical documentation:
-* 🎯 **[Product Specification Document (AI PM Spec)](./PRODUCT_SPEC.md)**: Product vision, target user personas, KPIs/metrics, development roadmap, and feature design for a Natural Language SQL conversational AI chatbot.
-* 📄 **[Project Documentation PDF](./Project%20Documentation.pdf)**: Comprehensive report detailing the ETL data modeling, entity-relationship diagrams (ERD), pipeline orchestration, validation rules, and schema design.
+This platform was designed and built with a product-first methodology to bridge the gap between complex climate and economic data engineering and downstream analytical consumers.
+
+### 🎯 Target User Personas
+| Persona | Core Needs | Pain Points | Platform Use Case |
+| :--- | :--- | :--- | :--- |
+| **Commodity Risk Analyst** | Predict food price volatility and supply chain disruption risks. | Manually combining CSV files from World Bank, WFP, and weather stations is slow and error-prone. | Uses the REST API / `master_data` unified view to feed quantitative models predicting price spikes. |
+| **International Policy Adviser** | Evaluate the impact of climate changes on national economies to allocate aid resources. | Lack of normalized historical context matching macroeconomic growth (GDP) with weather indices. | Leverages the queryable database to run cross-country regressions comparing precipitation with agricultural inflation. |
+
+### 📊 Key Performance Indicators (KPIs)
+* **Ingestion Latency (System Performance):** Total execution time for incremental data refresh must be `< 3 minutes` weekly.
+* **Data Completeness (Product Quality):** Percentage of monthly analytical records in `master_data` without null fields across all 4 key domains (climate, energy, food, economics) must exceed `95%`.
+* **API Response Time (User Experience):** P95 latency for analytical queries on `/api/get_all` must be `< 150ms`.
+* **AI Query Success Rate (AI Accuracy):** Percentage of natural language queries successfully translated to valid, context-appropriate SQL queries must exceed `90%`.
+
+---
+
+## AI Conversational Assistant (Upcoming Feature Spec)
+
+To democratize database access for non-technical users, we designed a **Conversational SQL Assistant** chatbot that translates plain English prompts into safe, read-only SQL queries executed against our warehouse.
+
+```mermaid
+sequenceDiagram
+    actor User as User Interface (Streamlit)
+    participant Agent as LLM Agent (Gemini API)
+    participant Schema as Database Schema Context
+    participant DB as PostgreSQL Warehouse
+    
+    User->>Agent: Plain English Query
+    Note over Agent: Retrieve DB Schema & Context
+    Agent->>Schema: Look up tables (master_data, countries)
+    Agent->>Agent: Construct SQL Query
+    Agent->>DB: Execute Read-Only SQL Query
+    DB-->>Agent: Query Results (JSON/DataFrame)
+    Agent->>Agent: Generate Summary & Chart Config
+    Agent-->>User: Narrative Response + Chart Rendering
+```
+
+* 🚀 **Read-Only Guards:** Protects against SQL injection by filtering and stripping mutating commands (`INSERT`, `UPDATE`, `DELETE`, `DROP`).
+* 📊 **Insight Summarization:** Runs database results back through the Gemini LLM to write a concise, executive-level summary of findings.
+
+---
+
+## Product Documentation & Specs
+
+* 🎯 **[Product Specification Document (Full AI PM Spec)](./PRODUCT_SPEC.md)**: Product vision, roadmap detail, target personas, and validation guardrails.
+* 📄 **[Project Documentation PDF (Technical Report)](./Project%20Documentation.pdf)**: Report detailing the database schemas, ETL pipelines flowcharts, validation checks, and data quality rules.
 
 ---
 
