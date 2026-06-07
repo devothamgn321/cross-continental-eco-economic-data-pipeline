@@ -302,8 +302,8 @@ This allows cross-source joins and unified analytics.
 
 ## Team
 
+* **Devothama Gundugurki Narasimhamurthy**
 * **David Denice**
-* **Devothama Narasimhamurthy**
 * **Robert Hula**
 * **Natalya Ratra**
 
