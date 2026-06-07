@@ -6,7 +6,7 @@ This project is an end-to-end automated data engineering platform that integrate
 
 The platform collects, transforms, standardizes, and serves data through a REST API, enabling cross-country analysis of weather, food prices, energy production/consumption, and macroeconomic indicators.
 
-Target countries include:
+### Target Countries
 * United States
 * Brazil
 * India
@@ -17,13 +17,26 @@ The system is fully containerized using Docker and supports automated refreshes 
 
 ---
 
+## Architecture
+
+```mermaid
+graph TD
+    A[External APIs / Data Sources] --> B[ETL Pipelines]
+    B --> C[master.py Ingestion Orchestrator]
+    C --> D[(PostgreSQL Warehouse)]
+    D --> E[Flask REST API]
+    E --> F[Client Applications / Dashboards]
+```
+
+---
+
 ## Key Features
 
 ### Automated Data Ingestion
-* World Bank Open Data API
-* U.S. Energy Information Administration (EIA) API
-* Open-Meteo Weather API
-* World Food Programme (WFP) Food Price Dataset
+* **World Bank Open Data API** — Macroeconomic indicators
+* **U.S. Energy Information Administration (EIA) API** — Energy statistics
+* **Open-Meteo Weather API** — Climate-related variables
+* **World Food Programme (WFP) Food Price Dataset** — Food prices
 
 ### Data Engineering Pipeline
 * Historical backfill support
@@ -43,97 +56,167 @@ The system is fully containerized using Docker and supports automated refreshes 
 * Cron-based scheduled refreshes
 * Environment-based configuration management
 
+---
+
+## Tech Stack
+
+* **Languages:** Python, SQL
+* **Data Engineering:** Pandas, SQLAlchemy, BeautifulSoup, Requests
+* **Database:** PostgreSQL
+* **Backend:** Flask
+* **Infrastructure:** Docker, Docker Compose, Cron
+
+---
 
 ## Project Structure
-* `config.py` — shared configuration
-* `.env.example` — environment template
-* `requirements.txt` — Python dependencies
-* `Dockerfile` — app container definition
-* `docker-compose.yml` — multi-container setup
-* `start.sh` — Docker startup script for backfill and API launch
-* `start_with_cron.sh` — Docker startup script for backfill, cron, and API launch
-* `run_incremental.sh` — incremental refresh runner
-* `master.py` — main orchestration script for full backfill
-* `world_bank.py` — World Bank ingestion and transformation
-* `eia_energy.py` — EIA energy ingestion
-* `weather.py` — weather ingestion
-* `food_download.py` — downloads the latest WFP food prices file
-* `food_backfill.py` — builds the historical food prices backfill file
-* `food_prices.py` — merges historical and latest WFP food data
-* `app.py` — Flask API
-* `api_smoke_test.py` — simple API smoke test script
-* `api_check.ipynb` — notebook for API checks and validation
-* `data/raw/` — raw source extracts
-* `data/processed/` — processed source outputs
 
+```
+.
+├── app.py
+├── master.py
+├── config.py
+├── world_bank.py
+├── eia_energy.py
+├── weather.py
+├── food_prices.py
+├── food_download.py
+├── food_backfill.py
+├── Dockerfile
+├── docker-compose.yml
+├── requirements.txt
+├── .env.example
+├── start_with_cron.sh
+├── run_incremental.sh
+├── cronjob
+└── README.md
+```
+
+---
+
+## Setup & Execution
+
+### 1. Clone the Repository
+```bash
+git clone <repository-url>
+cd T9_final_project
+```
+
+### 2. Create the Environment File
+```bash
+cp env.example .env
+```
+
+### 3. Add EIA API Key
+Register for a free API key at [EIA Open Data](https://www.eia.gov/opendata/register.php). Once received, update the `.env` file:
+```env
+EIA_API_KEY=YOUR_API_KEY_HERE
+```
+
+### 4. Build and Start Containers
+```bash
+docker compose up --build
+```
+> [!NOTE]
+> The initial startup performs a full historical backfill, which can take several minutes.
+
+---
+
+## Available Services
+
+| Service | URL |
+| :--- | :--- |
+| **Flask API** | [http://localhost:8001](http://localhost:8001) |
+| **Health Check** | [http://localhost:8001/api/health](http://localhost:8001/api/health) |
+
+---
+
+## API Endpoints
+
+### Health Check
+`GET /api/health`
+
+### Countries
+`GET /api/get_countries`
+
+### World Bank Indicators
+`GET /api/get_world_bank`
+* Returns: GDP, Inflation, Population
+
+### Food Prices
+`GET /api/get_food_prices`
+* Returns: Rice prices, Wheat flour prices, Maize prices
+
+### Energy Data
+`GET /api/get_energy`
+* Returns: Electricity production/consumption, Petroleum production/consumption, Natural gas production/consumption
+
+### Weather Data
+`GET /api/get_weather`
+* Returns: Average temperature, Total precipitation
+
+### Integrated Dataset
+`GET /api/get_all`
+* Returns the unified analytical dataset across all data sources.
+
+---
+
+## Automation Workflow
+
+### Backfill Mode
+Used during initial deployment.
+```bash
+PIPELINE_MODE=backfill python master.py
+```
+Builds the complete historical dataset.
+
+### Incremental Mode
+Used for ongoing maintenance.
+```bash
+PIPELINE_MODE=incremental python master.py
+```
+Processes only newly available data.
+
+### Scheduled Refresh
+Cron automatically executes `run_incremental.sh` every Sunday at 2:00 AM.
+
+---
+
+## Data Standardization
+
+All datasets are transformed into a common schema using:
+* `country_code` (ISO3)
+* `year_month` (YYYY-MM)
+
+This allows cross-source joins and unified analytics.
+
+---
 
 ## Data Sources
-1. World Bank API — macroeconomic indicators  
-2. EIA API — energy data  
-3. WFP Dataset via HDX — food prices  
-4. Open-Meteo API — weather data  
 
-## Warehouse Join Keys
-- `country_code`
-- `year_month`
+* **Open-Meteo:** Historical weather observations ([open-meteo.com](https://open-meteo.com))
+* **World Food Programme:** Global food price monitoring ([data.humdata.org](https://data.humdata.org/dataset/wfp-food-prices))
+* **U.S. Energy Information Administration:** International energy statistics ([eia.gov/opendata](https://www.eia.gov/opendata))
+* **World Bank Open Data:** Macroeconomic indicators ([data.worldbank.org](https://data.worldbank.org))
 
-## Execution Modes
+---
 
-### Backfill mode
-Backfill mode performs a full historical warehouse build from scratch. This is the default startup path and is used for clean initialization.
+## Future Enhancements
 
-### Incremental mode
-Incremental mode supports scheduled or manual refreshes by pulling only the newest available source data window or latest available period, depending on the source.
+* Additional countries and regions
+* Expanded historical coverage
+* Dashboard and visualization layer
+* Airflow orchestration
+* Streaming ingestion support
+* Enhanced monitoring and alerting
 
-## Requirements
+---
 
-### For Docker run
-Install:
-- Docker Desktop
+## Team
 
-### For local Python run
-Install:
-- Python 3.9 or newer
-- PostgreSQL
-- pip
+* **David Denice**
+* **Devothama Narasimhamurthy**
+* **Robert Hula**
+* **Natalya Ratra**
 
-## Environment Configuration
-
-This project requires an API key for the U.S. Energy Information Administration API.
-
-### EIA API key setup
-
-Register for a free API key at:
-[https://www.eia.gov/opendata/](https://www.eia.gov/opendata/)
-
-After you receive the key, create a `.env` file in the project root.
-
-### Option 1: copy from template
-
-cp .env.example .env
-
-Then open the `.env` file and replace the placeholder value with your EIA API key.
-
-Example:
-
-EIA_API_KEY=your_actual_api_key_here
-
-## Setup and Run
-
-From the project root, build and start the containers with:
-
-docker compose up --build
-
-
-
- 
- 
- 
-
-
-
-
-
-
-
-
+*Johns Hopkins University*  
+**EN.685.652 – Data Engineering Principles and Practice**
