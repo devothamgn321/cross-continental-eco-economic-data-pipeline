@@ -17,6 +17,12 @@ The system is fully containerized using Docker and supports automated refreshes 
 
 ---
 
+## Project Documentation
+
+Detailed project architecture, data models, system components design, ingestion pipeline details, and experimental results can be found in the official **[Project Documentation PDF](./Project%20Documentation.pdf)**.
+
+---
+
 ## Architecture
 
 ```mermaid
@@ -88,6 +94,7 @@ graph TD
 ├── start_with_cron.sh
 ├── run_incremental.sh
 ├── cronjob
+├── Project Documentation.pdf
 └── README.md
 ```
 
