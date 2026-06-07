@@ -1,33 +1,48 @@
 # Cross-Continental Eco-Economic Data Pipeline
 
 ## Overview
-This project implements an end-to-end ETL pipeline that integrates multiple heterogeneous data sources into a centralized PostgreSQL warehouse. The pipeline combines World Bank economic indicators, EIA energy data, World Food Programme food prices, and weather data into a unified analytical dataset keyed by `country_code` and `year_month`.
 
-The project includes:
-- a full historical backfill pipeline
-- source-level incremental update support
-- a PostgreSQL warehouse
-- a Flask API for querying the processed data
-- Docker Compose for one-command startup
+This project is an end-to-end automated data engineering platform that integrates environmental and economic datasets from multiple global sources into a centralized PostgreSQL data warehouse.
 
-## What This Project Does
-The pipeline collects and transforms data from multiple updateable and static sources:
+The platform collects, transforms, standardizes, and serves data through a REST API, enabling cross-country analysis of weather, food prices, energy production/consumption, and macroeconomic indicators.
 
-- **World Bank API** for macroeconomic indicators
-- **EIA API** for energy production and consumption data
-- **WFP dataset** for food prices
-- **Weather API** for climate-related variables
+Target countries include:
+* United States
+* Brazil
+* India
+* Philippines
+* Nigeria
 
-These sources are standardized and loaded into PostgreSQL tables, then merged into a final integrated analytical table called `master_data`.
+The system is fully containerized using Docker and supports automated refreshes through scheduled cron-based workflows.
+
+---
 
 ## Key Features
-- One-command Docker startup for peer review
-- Full warehouse backfill from scratch through `master.py`
-- Incremental refresh support for updateable sources
-- Automated WFP food dataset download
-- PostgreSQL schema with primary and foreign keys
-- Flask API endpoints for data access
-- Environment-based configuration through `.env`
+
+### Automated Data Ingestion
+* World Bank Open Data API
+* U.S. Energy Information Administration (EIA) API
+* Open-Meteo Weather API
+* World Food Programme (WFP) Food Price Dataset
+
+### Data Engineering Pipeline
+* Historical backfill support
+* Incremental update processing
+* Data standardization using `country_code` and `year_month`
+* Deduplication and validation checks
+* Automated ETL orchestration
+
+### Backend Services
+* Flask REST API
+* PostgreSQL data warehouse
+* JSON-based analytical endpoints
+
+### Infrastructure & Automation
+* Dockerized deployment
+* Docker Compose orchestration
+* Cron-based scheduled refreshes
+* Environment-based configuration management
+
 
 ## Project Structure
 * `config.py` — shared configuration
