@@ -2,153 +2,102 @@
 
 **Platform Product Case Study — Analyst-Facing Eco-Economic Intelligence Platform**
 
-This project is a **data platform product**, not just an engineering project. The design question is not "how do we move data?" — it is "what does an analyst need to understand the relationship between climate disasters and commodity markets, and how do we build infrastructure that makes that possible?"
+This is a data platform product, not just an engineering project. The design question isn't "how do we move data?" — it's "what does a policy analyst or researcher need to understand the relationship between climate, energy, food prices, and macroeconomic indicators, and how do we build infrastructure that makes that possible?"
 
 ---
 
 ## The Problem
 
-Climate disasters do not stay in the atmosphere. They ripple into food prices, commodity markets, and macroeconomic indicators — but the data to understand those effects is scattered across government APIs, NGO databases, financial data providers, and academic repositories, each with different schemas, update frequencies, and access patterns.
+Climate anomalies and energy resource shifts have direct, rapid impacts on food security and macroeconomic indicators — but the data to understand those ripple effects is scattered across government APIs, NGO databases, and financial data providers.
 
-**Fragmented data sources.** An analyst studying drought impact on wheat prices needs to pull FEWS NET disaster data, World Bank commodity feeds, FAO agricultural statistics, and country-level economic indicators — from 4 different APIs with 4 different authentication methods and response formats.
+**Fragmented data sources.** A researcher studying drought impact on food prices needs to pull weather data, World Bank economic indicators, EIA energy production figures, and commodity price feeds — from multiple APIs with different authentication methods.
 
-**No unified temporal alignment.** Disaster events are timestamped differently from commodity price updates. Monthly agricultural reports do not align with weekly market data. Analysts spend more time wrangling timestamps than deriving insights.
+**No unified temporal alignment.** Weather readings, monthly commodity prices, and annual economic indicators are timestamped differently.
 
-**No reusable infrastructure.** Each research question requires rebuilding the same data plumbing from scratch. There is no shared platform where analysts can query across domains without writing custom ETL.
+**No reusable infrastructure.** Each research question requires rebuilding the same data plumbing from scratch.
 
-**The result:** policy analysts, researchers, and NGO teams spend 60-70% of their time on data acquisition and cleaning — leaving little time for the analysis that drives decisions.
+**Result:** analysts spend 60-70% of their time on data acquisition — leaving little time for the analysis that drives decisions.
 
 ---
 
 ## Target Users
 
-| Persona | Role | Core Need | Pain |
-|---|---|---|---|
-| **Policy Analyst** | Advises on food security, climate response, trade policy | Cross-domain queries: "How did the 2022 Pakistan floods affect global wheat prices?" | No unified source; manually joining 4+ datasets |
-| **NGO Research Lead** | Designs aid programs, tracks commodity volatility | Reproducible, up-to-date data without engineering support | Rebuilds ETL scripts every project cycle |
-| **Academic Researcher** | Studies climate-economic correlations | Clean, structured, citable data across geographies | Raw API access is inconsistent; data quality varies |
-| **Data Journalist** | Reports on climate impact on food systems | Fast access to multi-country time series | No tool exists at the intersection of climate and economics |
+| Persona | Core Need | Pain |
+|---|---|---|
+| Policy Analyst | Cross-domain queries across weather, energy, food | Manually joining 4+ datasets |
+| NGO Research Lead | Reproducible data without engineering support | Rebuilds ETL every project |
+| Academic Researcher | Clean, citable data across geographies | Raw API access is inconsistent |
+| Supply-Chain Risk Officer | Multi-country economic + weather time series | No unified tool exists |
 
 ---
 
-## The Product Solution
+## Data Sources & Countries
 
-A unified eco-economic data warehouse that ingests, normalizes, and exposes multi-source data through a clean Flask API — so analysts can query cross-domain questions without touching raw APIs or writing ETL scripts.
+**5 Countries:** USA, Brazil, India, Philippines, Nigeria
 
-**The product decision:** Build for the analyst, not the data engineer. The API response schema is designed around the analytical question ("what happened to maize prices in Kenya in the 6 months after a major drought?"), not around the source system schema.
-
-**What It Does:**
-- Ingests climate disaster events, commodity prices, and macroeconomic indicators from 4 heterogeneous APIs across 5 countries
-- Normalizes schemas, aligns temporal granularity, and resolves geographic identifiers into a consistent PostgreSQL warehouse
-- Exposes a clean REST API with analyst-facing endpoints that return pre-joined, analysis-ready datasets
-- Containerizes the full stack with Docker for reproducibility
+**4 Data Sources:**
+- Open-Meteo API: Monthly weather per country capital (weather.py)
+- World Bank API: GDP, inflation, economic indicators (world_bank.py)
+- EIA: Energy production and consumption (eia_energy.py)
+- FAO / Food Price Feeds: Commodity price indices (food_prices.py, food_download.py)
 
 ---
 
 ## Core Product Features
 
-### 1. Multi-Source Ingestion Layer
-Pulls from 4 APIs: FEWS NET (disaster/food security events), World Bank (commodity price indices), FAO (agricultural production data), and country-level economic databases. Each connector handles authentication, rate limiting, pagination, and error recovery independently.
+### 1. Modular Source Connectors
+Each source is an isolated Python module. Each handles its own auth, pagination, error recovery, and output format independently.
 
-**PM decision:** Designed each source connector as an isolated module, not a monolithic ETL script. This lets analysts add new data sources without touching existing pipelines — critical for a research platform where the data universe keeps expanding.
+**PM decision:** Modular connectors over monolithic ETL. A researcher adding a new source shouldn't touch existing pipelines.
 
-### 2. Normalization and Temporal Alignment Engine
-Resolves schema mismatches (e.g., "ZWE" vs "Zimbabwe" vs "ZIM" for geographic identifiers), aligns time series to a consistent monthly grain, and handles missing data with documented imputation rules rather than silent drops.
+### 2. Normalization & Temporal Alignment
+Resolves schema mismatches, aligns time series to monthly grain, handles missing data with documented imputation rules. Output written to data/processed/ per source before merging.
 
-**PM decision:** Every imputation decision is logged in the data warehouse as metadata. An analyst querying the API can see "this value was interpolated because the source reported quarterly" — data lineage is a product feature, not an afterthought.
+**PM decision:** Every data quality decision is traceable — data lineage is a product feature, not an afterthought.
 
-### 3. PostgreSQL Warehouse with Analyst-Oriented Schema
-Structured as a star schema optimized for time-series analytical queries: fact tables for events and prices, dimension tables for countries, commodities, and disaster types. Indexes designed around the queries analysts actually run, not around ingestion convenience.
+### 3. PostgreSQL Warehouse (Star Schema)
+master.py loads processed CSVs into PostgreSQL, creates a merged master_data table, adds constraints. Schema optimized for analytical queries, not ingestion convenience.
 
-**PM decision:** Rejected a flat "dump everything into one table" approach because query performance at analytical scale matters. An analyst waiting 40 seconds for a query abandons the tool. Schema design is a product quality decision.
+**PM decision:** Rejected flat table approach. Query performance matters — an analyst waiting 40 seconds abandons the tool.
 
-### 4. Flask REST API (Analyst-Facing)
-Exposes pre-joined, analysis-ready endpoints. Example: GET /api/impact?country=KEN&disaster_type=drought&commodity=maize&window=6m returns aligned time series of disaster events and commodity prices for Kenya, ready to plot.
+### 4. Flask REST API
+app.py exposes pre-joined, filterable endpoints. Analysts query by country, date range, indicator type — no SQL needed.
 
-**PM decision:** API design started from analyst questions, not from data structure. The 10 most common analytical questions became the endpoint design. No analyst should need to write a JOIN.
+**PM decision:** API design started from analyst questions, not data structure. No analyst should need to write a JOIN.
 
-### 5. Docker Containerization
-Full stack (ingestion workers + PostgreSQL + Flask API) runs in Docker Compose. Researchers can reproduce the exact environment, run historical backfills, and deploy on any cloud provider without environment configuration.
+### 5. Automated Orchestration (Cron + Docker)
+start_with_cron.sh runs scheduled ingestion. run_incremental.sh handles delta updates. Docker Compose packages the full stack.
 
-**PM decision:** Reproducibility is a trust feature for research users. If an analyst cannot reproduce a result from 6 months ago, the platform is unreliable regardless of how accurate the data is.
-
----
-
-## System Architecture
-
-```
-External APIs (4 sources)
-  FEWS NET · World Bank · FAO · Country Economic DBs
-        |
-        v
-Ingestion Layer
-  Source-specific connectors
-  Auth, rate limiting, pagination, error recovery
-        |
-        v
-Normalization Engine
-  Schema mapping + geo resolution
-  Temporal alignment (monthly grain)
-  Imputation with audit log
-        |
-        v
-PostgreSQL Warehouse
-  Star schema, time-series optimized
-  Fact: events, prices, indicators
-  Dim: countries, commodities, disaster types, time
-        |
-        v
-Flask REST API
-  Analyst-facing endpoints
-  Pre-joined, analysis-ready
-  Filterable by country, commodity, disaster type, date range
-        |
-        v
-  Analyst / Researcher / Policy Tool
-```
+**PM decision:** Reproducibility is a trust feature. If an analyst can't reproduce a result from 6 months ago, the platform is unreliable.
 
 ---
 
 ## Product Strategy & PM Thinking
 
-### Problem Framing
+**Core insight:** The bottleneck is not analysis capability — it's data access. Analysts can derive insights if they have clean, aligned, cross-domain data. This product eliminates the 60-70% of time spent on wrangling.
 
-The bottleneck is not analysis capability — it is data access. Policy analysts and researchers are sophisticated. They can derive insights if they have clean, aligned, cross-domain data. The product eliminates the 60-70% of time spent on data wrangling.
+**Scope:** 5 countries chosen for data availability across all 4 sources. Expanding scope before the core pipeline is reliable creates compounding quality problems.
 
-### Prioritization
+**Deferred:** Real-time ingestion, UI/dashboard layer, predictive modeling — all out of scope until data quality is validated.
 
-Started with the narrowest viable data scope: 5 countries with the highest data availability and 3 commodity categories with the clearest disaster-price correlation evidence. Expanding scope before the core pipeline is reliable creates compounding data quality problems.
+### Metrics
 
-**Explicitly deferred:**
-- Real-time ingestion (scheduled batch is sufficient for monthly policy analysis)
-- UI/dashboard layer (analysts prefer API + their own visualization tools)
-- Predictive modeling (out of scope until historical data quality is validated)
+| Metric | Target |
+|---|---|
+| Data Freshness | <= 30 days lag |
+| Schema Coverage | > 90% of source fields mapped |
+| Query Response Time | < 2 seconds |
+| Imputation Rate | < 10% of values |
+| API Uptime | > 99% |
 
-### Metrics That Matter
-
-| Metric | Target | Why |
-|---|---|---|
-| **Data Freshness** | <= 30 days lag for all sources | Policy relevance degrades with stale data |
-| **Schema Coverage** | > 90% of source fields mapped | Low coverage means analysts discover gaps mid-project |
-| **Query Response Time** | < 2 seconds for standard queries | Slow queries kill adoption |
-| **Imputation Rate** | < 10% of values imputed | High imputation signals underlying data reliability issues |
-| **API Uptime** | > 99% | Research workflows block on platform availability |
-
-### Risks and Tradeoffs
+### Risks & Tradeoffs
 
 | Risk | Mitigation |
 |---|---|
-| API source goes offline or changes schema | Source connectors are isolated; schema versioning in warehouse |
-| Data quality varies by country | Coverage metadata exposed in API; analysts can filter by data quality tier |
-| Temporal misalignment across sources | Normalization engine logs all alignment decisions; audit trail in warehouse |
-| Scope creep from analyst requests | Modular connector design; new sources do not touch existing pipeline |
-
-### What I Would Do Differently in Production
-
-- Replace scheduled batch ingestion with Airflow DAGs for better observability and failure recovery
-- Add a data quality scoring layer so analysts can filter by confidence tier
-- Build a lightweight analyst query UI to reduce API learning curve for non-technical users
-- Add data versioning so analysts can reproduce historical queries after source data corrections
+| API source changes schema | Connectors are isolated; each fails independently |
+| Data quality varies by country | Coverage metadata exposed via API |
+| Temporal misalignment | Per-source normalization, audit trail |
+| Scope creep | Modular design; new sources don't touch existing |
 
 ---
 
@@ -156,10 +105,10 @@ Started with the narrowest viable data scope: 5 countries with the highest data 
 
 | Phase | Features | Milestone |
 |---|---|---|
-| **MVP (Done)** | 4-source ingestion, normalization engine, PostgreSQL warehouse, Flask API, Docker | Working data platform for 5 countries |
-| **Phase 2** | Airflow orchestration, data quality scoring, 20-country coverage | Research-grade reliability |
-| **Phase 3** | Analyst query UI, API authentication, rate limiting | Platform-grade product |
-| **Phase 4** | Predictive module (disaster-to-price impact forecasting), partner integrations | Policy intelligence product |
+| MVP (Done) | 4-source ingestion, normalization, PostgreSQL, Flask API, Docker, cron | Working platform across 5 countries |
+| Phase 2 | Airflow orchestration, data quality scoring, 20-country coverage | Research-grade reliability |
+| Phase 3 | Lightweight analyst query UI, UN OCHA / WFP integrations | Platform-grade product |
+| Phase 4 | Predictive module: weather + energy -> food price forecasting | Policy intelligence product |
 
 ---
 
@@ -167,41 +116,59 @@ Started with the narrowest viable data scope: 5 countries with the highest data 
 
 | Layer | Technology |
 |---|---|
-| Ingestion | Python (requests, pandas) |
-| Normalization | Python (custom transformation pipeline) |
-| Warehouse | PostgreSQL (star schema) |
-| API Layer | Flask + SQLAlchemy |
+| Ingestion | Python (requests, pandas, beautifulsoup4) |
+| Normalization | Python (per-source transformation pipeline) |
+| Warehouse | PostgreSQL via SQLAlchemy |
+| API Layer | Flask |
+| Orchestration | Cron (cronjob, start_with_cron.sh) |
 | Containerization | Docker + Docker Compose |
-| Data Sources | FEWS NET API, World Bank API, FAO API, Country Economic DBs |
+| Smoke Testing | api_smoke_test.py, api_check.ipynb |
+
+---
+
+## Repository Structure
+
+cross-continental-eco-economic-data-pipeline/
+- weather.py           Open-Meteo ingestion (5 countries, monthly)
+- world_bank.py        World Bank GDP + inflation connector
+- eia_energy.py        EIA energy production connector
+- food_prices.py       Food price index connector
+- food_download.py     Food data download helper
+- food_backfill.py     Historical food price backfill
+- master.py            Orchestrator: load CSVs -> PostgreSQL -> master_data
+- app.py               Flask REST API
+- config.py            DB config + API base URLs
+- api_smoke_test.py    API endpoint smoke tests
+- api_check.ipynb      Interactive API validation notebook
+- run_incremental.sh   Incremental update script
+- start_with_cron.sh   Cron-scheduled ingestion
+- docker-compose.yml   Full-stack container orchestration
+- PRODUCT_SPEC.md      Full product specification
 
 ---
 
 ## Run Locally
 
-```bash
 git clone https://github.com/devothamgn321/cross-continental-eco-economic-data-pipeline.git
 cd cross-continental-eco-economic-data-pipeline
+cp env.example .env
 docker-compose up --build
-docker exec -it pipeline python ingestion/run_all.py
-```
 
-API is live at http://localhost:5000
-
-Example query:
-```
-curl "http://localhost:5000/api/impact?country=KEN&commodity=maize&window=6m"
-```
+Or without Docker:
+pip install -r requirements.txt
+python master.py
+python app.py
 
 ---
 
 ## About
 
-**Devothama GN (Ruby)**
-AI Product Manager | Platform Products | JHU Engineering Management
+**Devothama GN**
+AI Product Manager | Platform Products | MS Engineering Management @ Johns Hopkins
 Ex-Mercedes-Benz ADAS | TEDxJHU Speaker
 
 [Portfolio](https://devothamagn.netlify.app) · [LinkedIn](https://linkedin.com/in/devothamagn) · [GitHub](https://github.com/devothamgn321)
 
 ---
 
-*Positioned as an analyst-facing data platform product — demonstrating how product thinking applies to data infrastructure: starting from user needs, designing for the query not the schema, and building for reproducibility and trust.*
+*Positioned as an analyst-facing data platform product — demonstrating product thinking applied to data infrastructure: starting from user needs, designing for the query not the schema, and building for reproducibility and trust.*
